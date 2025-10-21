@@ -104,16 +104,50 @@ def main():
         
         st.divider()
         
+        # 設定ファイルアップロード（STREAMED用のみ表示）
+        dept_mapping_file = None
+        partner_list_file = None
+        
+        if input_type == "streamed":
+            st.subheader("📋 設定ファイル（任意）")
+            st.caption("アップロードしない場合は、configフォルダの固定ファイルを使用します")
+            
+            dept_mapping_file = st.file_uploader(
+                "部署マッピングExcel",
+                type=["xlsx"],
+                help="部署名の正規化に使用",
+                key="dept_mapping"
+            )
+            
+            partner_list_file = st.file_uploader(
+                "取引先一覧Excel",
+                type=["xlsx"],
+                help="取引先名の照合に使用",
+                key="partner_list"
+            )
+            
+            # アップロード状態の表示
+            if dept_mapping_file or partner_list_file:
+                st.divider()
+                st.markdown("#### ✅ アップロード済み")
+                if dept_mapping_file:
+                    st.success(f"📋 {dept_mapping_file.name}")
+                if partner_list_file:
+                    st.success(f"📋 {partner_list_file.name}")
+            
+            st.divider()
+        
         # 使い方
         with st.expander("📖 使い方"):
             st.markdown("""
             **基本的な流れ：**
             1. インプット形式を選択
-            2. ファイルをアップロード
-            3. （STREAMEDの場合）freee取引先CSVをアップロード
-            4. アウトプット形式を選択
-            5. 「実行」ボタンをクリック
-            6. 生成されたファイルをダウンロード
+            2. （STREAMEDの場合）設定ファイルをアップロード（任意）
+            3. ファイルをアップロード
+            4. （STREAMEDの場合）freee取引先CSVをアップロード
+            5. アウトプット形式を選択
+            6. 「実行」ボタンをクリック
+            7. 生成されたファイルをダウンロード
             """)
     
     # メインエリア
@@ -166,10 +200,21 @@ def main():
                 )
         
         if execute_button:
-            process_files(uploaded_files, input_type, output_type, freee_partner_file)
+            # STREAMEDの場合は設定ファイルも渡す
+            if input_type == "streamed":
+                process_files(
+                    uploaded_files, 
+                    input_type, 
+                    output_type, 
+                    freee_partner_file,
+                    dept_mapping_file,
+                    partner_list_file
+                )
+            else:
+                process_files(uploaded_files, input_type, output_type)
 
 
-def process_files(uploaded_files, input_type, output_type, freee_partner_file=None):
+def process_files(uploaded_files, input_type, output_type, freee_partner_file=None, dept_mapping_file=None, partner_list_file=None):
     """ファイルを処理する"""
     
     progress_bar = st.progress(0)
@@ -206,8 +251,22 @@ def process_files(uploaded_files, input_type, output_type, freee_partner_file=No
                 freee_csv_path = TEMP_DIR / "freee_partners.csv"
                 freee_csv_path.write_bytes(freee_partner_file.getvalue())
                 
-                dept_mapping_path = PROJECT_ROOT / "config" / "dept_mapping.xlsx"
-                partner_list_path = PROJECT_ROOT / "config" / "partner_list.xlsx"
+                # 設定ファイルのパスを決定（アップロードされていればそちらを使用）
+                if dept_mapping_file:
+                    dept_mapping_path = TEMP_DIR / "temp_dept_mapping.xlsx"
+                    dept_mapping_path.write_bytes(dept_mapping_file.getvalue())
+                    st.sidebar.info("✅ アップロードされた部署マッピングを使用")
+                else:
+                    dept_mapping_path = PROJECT_ROOT / "config" / "dept_mapping.xlsx"
+                    st.sidebar.info("📁 configフォルダの部署マッピングを使用")
+                
+                if partner_list_file:
+                    partner_list_path = TEMP_DIR / "temp_partner_list.xlsx"
+                    partner_list_path.write_bytes(partner_list_file.getvalue())
+                    st.sidebar.info("✅ アップロードされた取引先一覧を使用")
+                else:
+                    partner_list_path = PROJECT_ROOT / "config" / "partner_list.xlsx"
+                    st.sidebar.info("📁 configフォルダの取引先一覧を使用")
                 
                 dept_normalizer = DeptNormalizer(str(dept_mapping_path))
                 data_list = dept_normalizer.normalize(data_list)
